@@ -1,100 +1,82 @@
-const { FIREBASE_BASE_URL } = require('../config/firebase');
+const FIREBASE_BASE_URL = process.env.FIREBASE_DATABASE_URL || 'https://my-life-os-b0878.firebaseio.com';
 
-// Вспомогательная функция для сборки персонального пути к Firestore
-function getUserUrl(userId) {
-  return `${FIREBASE_BASE_URL}/users_${userId}`;
-}
+class TaskService {
+    // Получение всех задач
+    async getAllTasks() {
+        try {
+            const response = await fetch(`${FIREBASE_BASE_URL}/tasks.json`);
+            if (!response.ok) throw new Error(`Firebase error: ${response.statusText}`);
+            
+            const data = await response.json();
+            if (!data) return [];
 
-async function getAllTasks(userId) {
-  if (!userId) return [];
-  try {
-    const response = await fetch(`${getUserUrl(userId)}/tasks`);
-    if (!response.ok) {
-      if (response.status === 404) return [];
-      throw new Error(`Firebase error: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    if (!data.documents) return [];
-
-    return data.documents.map(doc => {
-      const fields = doc.fields;
-      const id = doc.name.split('/').pop();
-
-      return {
-        id,
-        text: fields.text?.stringValue || '',
-        targetPeriod: fields.targetPeriod?.stringValue || 'today',
-        targetDate: fields.targetDate?.stringValue || '',
-        isMain: fields.isMain?.booleanValue || false,
-        parentId: fields.parentId?.stringValue || null,
-        priority: fields.priority?.stringValue || 'medium',
-        category: fields.category?.stringValue || 'personal',
-        notes: fields.notes?.stringValue || '',
-        done: fields.done?.booleanValue || false
-      };
-    });
-  } catch (error) {
-    console.error('[TaskService][getAllTasks] Error:', error.message);
-    throw error;
-  }
-}
-
-async function createTask(taskData, userId) {
-  if (!userId) throw new Error('Unauthorized');
-  try {
-    const documentId = `task_${Date.now()}`;
-    const firestoreBody = {
-      fields: {
-        text: { stringValue: taskData.text || 'Без названия' },
-        targetPeriod: { stringValue: taskData.targetPeriod || 'today' },
-        targetDate: { stringValue: taskData.targetDate || '' },
-        isMain: { booleanValue: !!taskData.isMain },
-        parentId: taskData.parentId ? { stringValue: taskData.parentId } : { nullValue: null },
-        priority: { stringValue: taskData.priority || 'medium' },
-        category: { stringValue: taskData.category || 'personal' },
-        notes: { stringValue: taskData.notes || '' },
-        done: { booleanValue: false }
-      }
-    };
-
-    const response = await fetch(`${getUserUrl(userId)}/tasks/${documentId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(firestoreBody)
-    });
-
-    if (!response.ok) throw new Error(`Firebase update error: ${response.statusText}`);
-    return { id: documentId, ...taskData, done: false };
-  } catch (error) {
-    console.error('[TaskService][createTask] Error:', error.message);
-    throw error;
-  }
-}
-
-async function updateTaskStatus(id, done, userId) {
-  if (!userId) throw new Error('Unauthorized');
-  try {
-    const url = `${getUserUrl(userId)}/tasks/${id}?updateMask.fieldPaths=done`;
-    const response = await fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fields: {
-          done: { booleanValue: done }
+            // Преобразуем объект Firebase в массив с id
+            return Object.keys(data).map(key => ({
+                id: key,
+                ...data[key]
+            }));
+        } catch (error) {
+            console.error('[TaskService][getAllTasks] Error:', error.message);
+            throw error;
         }
-      })
-    });
-    if (!response.ok) throw new Error(`Firebase patch error: ${response.statusText}`);
-    return true;
-  } catch (error) {
-    console.error('[TaskService][updateTaskStatus] Error:', error.message);
-    throw error;
-  }
+    }
+
+    // Создание новой задачи
+    async createTask(taskData) {
+        try {
+            const response = await fetch(`${FIREBASE_BASE_URL}/tasks.json`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...taskData,
+                    createdAt: new Date().toISOString()
+                })
+            });
+
+            if (!response.ok) throw new Error(`Firebase error: ${response.statusText}`);
+            
+            const data = await response.json();
+            return { id: data.name, ...taskData };
+        } catch (error) {
+            console.error('[TaskService][createTask] Error:', error.message);
+            throw error;
+        }
+    }
+
+    // Обновление статуса задачи (выполнено / не выполнено)
+    async updateTaskStatus(id, done) {
+        try {
+            // Используем PATCH и указываем точечное обновление поля через задачи Firebase REST API
+            const url = `${FIREBASE_BASE_URL}/tasks/${id}.json`;
+            const response = await fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ done: done })
+            });
+
+            if (!response.ok) throw new Error(`Firebase patch error: ${response.statusText}`);
+            return true;
+        } catch (error) {
+            console.error('[TaskService][updateTaskStatus] Error:', error.message);
+            throw error;
+        }
+    }
+
+    // Удаление задачи
+    async deleteTask(id) {
+        try {
+            const response = await fetch(`${FIREBASE_BASE_URL}/tasks/${id}.json`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) throw new Error(`Firebase delete error: ${response.statusText}`);
+            return true;
+        } catch (error) {
+            console.error('[TaskService][deleteTask] Error:', error.message);
+            throw error;
+        }
+    }
 }
 
-module.exports = {
-  getAllTasks,
-  createTask,
-  updateTaskStatus
-};
+// Экспортируем экземпляр класса строго в конце файла
+module.exports = new TaskService();
