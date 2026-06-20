@@ -1,9 +1,14 @@
 const { FIREBASE_BASE_URL } = require('../config/firebase');
 
-// 1. Функция получения задач
-async function getAllTasks() {
+// Вспомогательная функция для сборки персонального пути к Firestore
+function getUserUrl(userId) {
+  return `${FIREBASE_BASE_URL}/users_${userId}`;
+}
+
+async function getAllTasks(userId) {
+  if (!userId) return [];
   try {
-    const response = await fetch(`${FIREBASE_BASE_URL}/tasks`);
+    const response = await fetch(`${getUserUrl(userId)}/tasks`);
     if (!response.ok) {
       if (response.status === 404) return [];
       throw new Error(`Firebase error: ${response.statusText}`);
@@ -35,8 +40,8 @@ async function getAllTasks() {
   }
 }
 
-// 2. Функция создания задачи
-async function createTask(taskData) {
+async function createTask(taskData, userId) {
+  if (!userId) throw new Error('Unauthorized');
   try {
     const documentId = `task_${Date.now()}`;
     const firestoreBody = {
@@ -53,7 +58,7 @@ async function createTask(taskData) {
       }
     };
 
-    const response = await fetch(`${FIREBASE_BASE_URL}/tasks/${documentId}`, {
+    const response = await fetch(`${getUserUrl(userId)}/tasks/${documentId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(firestoreBody)
@@ -67,10 +72,10 @@ async function createTask(taskData) {
   }
 }
 
-// 3. Функция обновления статуса
-async function updateTaskStatus(id, done) {
+async function updateTaskStatus(id, done, userId) {
+  if (!userId) throw new Error('Unauthorized');
   try {
-    const url = `${FIREBASE_BASE_URL}/tasks/${id}?updateMask.fieldPaths=done`;
+    const url = `${getUserUrl(userId)}/tasks/${id}?updateMask.fieldPaths=done`;
     const response = await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -88,7 +93,6 @@ async function updateTaskStatus(id, done) {
   }
 }
 
-// Экспортируем плоский объект с функциями
 module.exports = {
   getAllTasks,
   createTask,
