@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life OS — Премиальный Пространственный Ассистент</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --background: #09090b;
+            --card: #18181b;
+            --border: #27272a;
+            --primary: #ffffff;
+            --primary-foreground: #09090b;
+            --muted: #a1a1aa;
+            --text-muted: #71717a;
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Анимация плавного появления окон */
+        .app-window {
+            display: none;
+            opacity: 0;
+            transform: scale(0.98);
+            transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .app-window.active {
+            display: flex;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .bento-card {
+            background-color: var(--card);
+            border: 1px solid var(--border);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .bento-card:hover {
+            border-color: #3f3f46;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px -10px rgba(0,0,0,0.7);
+        }
+
+        /* Стилизация списков */
+        .data-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .data-list li {
+            background: #202023;
+            border: 1px solid var(--border);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .subtask-item {
+            margin-left: 24px !important;
+            border-left: 2px solid #3f3f46 !important;
+            border-radius: 0 8px 8px 0 !important;
+            background: #1c1c1e !important;
+        }
+
+        .task-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge {
+            background: var(--border);
+            font-size: 10px;
+            text-transform: uppercase;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            margin-right: 6px;
+        }
+
+        .task-notes {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 4px;
+            border-top: 1px solid #27272a;
+            padding-top: 4px;
+        }
+
+        .item-time {
+            font-size: 10px;
+            color: var(--text-muted);
+            align-self: flex-end;
+        }
+
+        .expense-row {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            font-weight: 500;
+        }
+
+        .expense-amount {
+            color: #ef4444;
+        }
+
+        /* Индикатор онлайна */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #ef4444;
+            border-radius: 50%;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+
+        .status-dot.online {
+            background-color: #22c55e;
+            box-shadow: 0 0 8px #22c55e;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <header class="border-b border-zinc-800 px-6 py-4 flex justify-between items-center bg-zinc-950/50 backdrop-blur-md sticky top-0 z-50">
+        <div class="flex items-center gap-3">
+            <div class="h-8 w-8 bg-white text-black rounded-lg flex items-center justify-center font-bold text-lg tracking-tighter">L</div>
+            <span class="font-bold tracking-tight text-xl">Life OS</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full text-xs font-medium text-zinc-400">
+                <span id="status-indicator" class="status-dot"></span>
+                <span id="status-text">Загрузка...</span>
+            </div>
+            <button onclick="handleLogout()" id="logoutBtn" class="hidden text-zinc-400 hover:text-white transition">
+                <i data-lucide="log-out" class="w-5 h-5"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-6xl flex items-center justify-center">
+
+        <div id="window-auth" class="app-window active w-full flex flex-col items-center justify-center">
+            <div class="w-full max-w-md bg-zinc-900 border border-zinc-800 p-8 rounded-2xl shadow-2xl space-y-6">
+                <div class="text-center space-y-2">
+                    <h2 class="text-3xl font-extrabold tracking-tight">Добро пожаловать</h2>
+                    <p class="text-zinc-400 text-sm">Войдите в систему или создайте новый личный Life OS профиль</p>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Email</label>
+                        <input type="email" id="authEmail" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 mt-1 focus:outline-none focus:border-zinc-500 transition text-white" placeholder="name@example.com">
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Пароль</label>
+                        <input type="password" id="authPassword" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 mt-1 focus:outline-none focus:border-zinc-500 transition text-white" placeholder="••••••••">
+                    </div>
+                    <div class="flex gap-4 pt-2">
+                        <button onclick="handleAuth('login')" class="flex-1 bg-white text-black font-semibold p-3 rounded-xl hover:bg-zinc-200 transition shadow-lg">Войти</button>
+                        <button onclick="handleAuth('register')" class="flex-1 bg-zinc-800 text-white font-semibold p-3 rounded-xl hover:bg-zinc-700 transition border border-zinc-700">Регистрация</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="window-hub" class="app-window hidden w-full flex-col space-y-8">
+            <div class="space-y-2">
+                <h1 class="text-4xl font-extrabold tracking-tight sm:text-5xl">Пространство управления</h1>
+                <p class="text-zinc-400 text-lg">Ваша продуктивность, привычки и аналитика в единой системе.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <div onclick="openModule('todo')" class="bento-card md:col-span-2 p-6 rounded-2xl cursor-pointer flex flex-col justify-between group min-h-[220px]">
+                    <div class="flex justify-between items-start">
+                        <div class="p-3 bg-zinc-800 rounded-xl text-white group-hover:bg-white group-hover:text-black transition-all duration-300">
+                            <i data-lucide="check-square" class="w-6 h-6"></i>
+                        </div>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Задачи и Цели</span>
+                    </div>
+                    <div class="space-y-1 mt-4">
+                        <div class="text-xs text-zinc-400 uppercase tracking-wider font-medium">Следующая задача</div>
+                        <div id="bentoNextTask" class="text-2xl font-bold tracking-tight line-clamp-1">Загрузка...</div>
+                    </div>
+                    <div class="flex gap-6 border-t border-zinc-800 pt-4 mt-4 text-sm">
+                        <div><span id="bentoDoneTasks" class="font-bold text-white">0</span> <span class="text-zinc-500">выполнено</span></div>
+                        <div><span id="bentoLeftTasks" class="font-bold text-white">0</span> <span class="text-zinc-500">осталось</span></div>
+                    </div>
+                </div>
+
+                <div onclick="openModule('habits')" class="bento-card p-6 rounded-2xl cursor-pointer flex flex-col justify-between group min-h-[220px]">
+                    <div class="flex justify-between items-start">
+                        <div class="p-3 bg-zinc-800 rounded-xl text-white group-hover:bg-white group-hover:text-black transition-all duration-300">
+                            <i data-lucide="zap" class="w-6 h-6"></i>
+                        </div>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Рутина</span>
+                    </div>
+                    <div class="mt-4">
+                        <div id="bentoHabits" class="text-5xl font-black tracking-tighter">0</div>
+                        <div class="text-sm text-zinc-400 mt-1">Активных привычек на контроле</div>
+                    </div>
+                    <div class="text-xs text-zinc-500 border-t border-zinc-800 pt-3 mt-4">Нажмите для трекинга</div>
+                </div>
+
+                <div onclick="openModule('logs')" class="bento-card p-6 rounded-2xl cursor-pointer flex flex-col justify-between group min-h-[200px]">
+                    <div class="flex justify-between items-start">
+                        <div class="p-3 bg-zinc-800 rounded-xl text-white group-hover:bg-white group-hover:text-black transition-all duration-300">
+                            <i data-lucide="book-open" class="w-6 h-6"></i>
+                        </div>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Логи</span>
+                    </div>
+                    <div class="text-lg font-bold tracking-tight mt-4">Быстрые заметки, инсайты и события вашего дня</div>
+                    <div class="text-xs text-zinc-500 border-t border-zinc-800 pt-3 mt-4">Открыть ментальный лог</div>
+                </div>
+
+                <div onclick="openModule('expenses')" class="bento-card md:col-span-2 p-6 rounded-2xl cursor-pointer flex flex-col justify-between group min-h-[200px]">
+                    <div class="flex justify-between items-start">
+                        <div class="p-3 bg-zinc-800 rounded-xl text-white group-hover:bg-white group-hover:text-black transition-all duration-300">
+                            <i data-lucide="wallet" class="w-6 h-6"></i>
+                        </div>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Бюджет</span>
+                    </div>
+                    <div class="mt-4 flex justify-between items-end">
+                        <div>
+                            <div class="text-xs text-zinc-400 uppercase tracking-wider">Всего зафиксировано расходов</div>
+                            <div id="bentoExpensesCount" class="text-3xl font-black tracking-tight mt-1">0 транзакций</div>
+                        </div>
+                    </div>
+                    <div class="text-xs text-zinc-500 border-t border-zinc-800 pt-3 mt-4">Управление расходами и категориями</div>
+                </div>
+
+            </div>
+        </div>
+
+        <div id="window-todo" class="app-window w-full flex-col space-y-6">
+            <div class="flex items-center gap-4">
+                <button onclick="returnToHub()" class="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+                <h2 class="text-2xl font-bold">Управление задачами</h2>
+            </div>
+            <form id="todoForm" class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="text" id="taskInput" placeholder="Название задачи..." class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:outline-none" required>
+                    <select id="taskCategory" class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:outline-none">
+                        <option value="personal">Личное</option>
+                        <option value="work">Работа</option>
+                        <option value="health">Здоровье</option>
+                        <option value="finance">Финансы</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <select id="taskPeriod" class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:outline-none">
+                        <option value="today">Сегодня</option>
+                        <option value="week">Неделя</option>
+                        <option value="month">Месяц</option>
+                        <option value="year">Год</option>
+                    </select>
+                    <select id="taskPriority" class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:outline-none">
+                        <option value="low">Низкий приоритет</option>
+                        <option value="medium" selected>Средний приоритет</option>
+                        <option value="high">Высокий приоритет</option>
+                    </select>
+                    <input type="text" id="taskNotes" placeholder="Заметки/Описание (необязательно)..." class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:outline-none">
+                </div>
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-zinc-800 pt-4">
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 text-sm text-zinc-400 cursor-pointer">
+                            <input type="checkbox" id="isSubtask" class="rounded border-zinc-800 bg-zinc-950 text-white focus:ring-0"> Это подзадача
+                        </label>
+                        <select id="parentTaskId" class="bg-zinc-950 border border-zinc-800 rounded-xl p-2 text-sm text-white focus:outline-none" disabled>
+                            <option value="">-- Выберите родительскую --</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="bg-white text-black font-semibold px-6 py-3 rounded-xl hover:bg-zinc-200 transition">Добавить задачу</button>
+                </div>
+            </form>
+            <ul id="taskList" class="data-list"></ul>
+        </div>
+
+        <div id="window-habits" class="app-window w-full flex-col space-y-6">
+            <div class="flex items-center gap-4">
+                <button onclick="returnToHub()" class="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+                <h2 class="text-2xl font-bold">Трекер привычек</h2>
+            </div>
+            <form id="habitForm" class="flex gap-4 bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
+                <input type="text" id="habitInput" placeholder="Новая привычка (например: Чтение 30 мин)..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded-xl p-3 focus:outline-none" required>
+                <button type="submit" class="bg-white text-black font-semibold px-6 rounded-xl hover:bg-zinc-200 transition">Добавить</button>
+            </form>
+            <ul id="habitList" class="data-list"></ul>
+        </div>
+
+        <div id="window-logs" class="app-window w-full flex-col space-y-6">
+            <div class="flex items-center gap-4">
+                <button onclick="returnToHub()" class="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+                <h2 class="text-2xl font-bold">Дневник / Ментальный лог</h2>
+            </div>
+            <form id="logForm" class="flex gap-4 bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
+                <input type="text" id="logInput" placeholder="Что произошло сегодня? Мысль, событие, итог..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded-xl p-3 focus:outline-none" required>
+                <button type="submit" class="bg-white text-black font-semibold px-6 rounded-xl hover:bg-zinc-200 transition">Записать</button>
+            </form>
+            <ul id="logList" class="data-list"></ul>
+        </div>
+
+        <div id="window-expenses" class="app-window w-full flex-col space-y-6">
+            <div class="flex items-center gap-4">
+                <button onclick="returnToHub()" class="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+                <h2 class="text-2xl font-bold">Контроль финансов</h2>
+            </div>
+            <form id="expenseForm" class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
+                <input type="number" id="expenseAmount" placeholder="Сумма (сум)..." class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 focus:outline-none" required>
+                <input type="text" id="expenseCategory" placeholder="Категория (Продукты, Такси...)..." class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 focus:outline-none" required>
+                <button type="submit" class="bg-white text-black font-semibold p-3 rounded-xl hover:bg-zinc-200 transition">Добавить расход</button>
+            </form>
+            <ul id="expenseList" class="data-list"></ul>
+        </div>
+
+    </main>
+
+    <footer class="border-t border-zinc-800 px-6 py-4 text-center text-xs text-zinc-500 bg-zinc-950/20">
+        &copy; 2026 Life OS Project. Инкапсуляция архитектурной логики.
+    </footer>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+        // 1. КОНФИГУРАЦИЯ FIREBASE (ЗАМЕНИТЕ APIKEY НА СВОЙ!)
+        const firebaseConfig = {
+            apiKey: "AIzaSyAOxXKRm_XCz9bwiXSeZJU48G4YQLzA2nQ", // <-- СЮДА ВСТАВЬТЕ ВАШ WEB API KEY ИЗ НАСТРОЕК ПРОЕКТА FIREBASE
+            authDomain: "my-life-os-b0878.firebaseapp.com",
+            projectId: "my-life-os-b0878"
+        };
+
+        const fbApp = initializeApp(firebaseConfig);
+        const auth = getAuth(fbApp);
+
+        // 2. ССЫЛКА НА ВАШ ЖИВОЙ БЭКЕНД НА RENDER (БЕЗ СЛЭША НА КОНЦЕ)
+        const API_URL = 'https://life-os-api-noaw.onrender.com'; 
+        
+        let currentUserId = null;
+        let allTasks = []; let allHabits = []; let allLogs = []; let allExpenses = [];
+
+        // Слушатель состояния авторизации пользователя
+        onAuthStateChanged(auth, (user) => {
+            const statusIndicator = document.getElementById('status-indicator');
+            const statusText = document.getElementById('status-text');
+            const logoutBtn = document.getElementById('logoutBtn');
+
+            if (user) {
+                currentUserId = user.uid;
+                logoutBtn.classList.remove('hidden');
+                
+                // Проверяем связь с облачным API Express
+                fetch(`${API_URL}/status`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            statusText.textContent = 'Life OS Cloud Active'; 
+                            statusIndicator.classList.add('online');
+                            loadAllData();
+                        }
+                    }).catch(() => { 
+                        statusText.textContent = 'Ошибка Express шлюза'; 
+                    });
+
+                // Переключаем интерфейс с окна авторизации на Хаб
+                document.getElementById('window-auth').classList.remove('active');
+                document.getElementById('window-hub').classList.add('active');
+            } else {
+                currentUserId = null;
+                logoutBtn.classList.add('hidden');
+                statusText.textContent = 'Требуется авторизация';
+                statusIndicator.classList.remove('online');
+                
+                // Сбрасываем окна на окно авторизации
+                document.querySelectorAll('.app-window').forEach(win => win.classList.remove('active'));
+                document.getElementById('window-hub').classList.add('hidden');
+                document.getElementById('window-auth').classList.add('active');
+            }
+            lucide.createIcons();
+        });
+
+        // Кнопки логина и регистрации
+        window.handleAuth = async function(type) {
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            
+            if(!email || !password) return alert('Заполните все поля ввода!');
+            if(password.length < 6) return alert('Пароль должен содержать от 6 символов!');
+            
+            try {
+                if(type === 'login') {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } else {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                    alert('Регистрация успешно завершена! Ваш профиль готов.');
+                }
+            } catch(error) {
+                alert(`Ошибка аутентификации: ${error.message}`);
+            }
+        }
+
+        window.handleLogout = function() {
+            signOut(auth);
+        }
+
+        // Переключение окон дешборда
+        window.openModule = function(moduleName) {
+            document.getElementById('window-hub').classList.remove('active');
+            document.getElementById('window-hub').classList.add('hidden');
+            document.getElementById(`window-${moduleName}`).classList.add('active');
+            lucide.createIcons();
+        }
+
+        window.returnToHub = function() {
+            document.querySelectorAll('.app-window').forEach(win => win.classList.remove('active'));
+            document.getElementById('window-hub').classList.remove('hidden');
+            document.getElementById('window-hub').classList.add('active');
+            lucide.createIcons();
+        }
+
+        // Логика управления подзадачами в форме
+        document.getElementById('isSubtask').addEventListener('change', (e) => {
+            document.getElementById('parentTaskId').disabled = !e.target.checked;
+            document.getElementById('parentTaskId').required = e.target.checked;
+        });
+
+        // Загрузка данных с передачей уникального X-User-Id заголовка в Express
+        function loadAllData() {
+            if (!currentUserId) return;
+            
+            const headers = { 'X-User-Id': currentUserId };
+
+            Promise.all([
+                fetch(`${API_URL}/api/tasks`, { headers }).then(r => r.json()),
+                fetch(`${API_URL}/api/habits`, { headers }).then(r => r.json()),
+                fetch(`${API_URL}/api/logs`, { headers }).then(r => r.json()),
+                fetch(`${API_URL}/api/expenses`, { headers }).then(r => r.json())
+            ]).then(([tData, hData, lData, eData]) => {
+                allTasks = tData.data || []; 
+                allHabits = hData.habits || []; 
+                allLogs = lData.logs || []; 
+                allExpenses = eData.expenses || [];
+                render();
+            }).catch(err => console.error('Ошибка синхронизации данных:', err));
+        }
+
+        // Отрисовка всех динамических элементов интерфейса
+        function render() {
+            // Селектор родительских задач
+            const parentSelect = document.getElementById('parentTaskId');
+            parentSelect.innerHTML = '<option value="">-- Выберите задачу --</option>';
+            allTasks.filter(t => !t.parentId).forEach(t => {
+                parentSelect.innerHTML += `<option value="${t.id}">${t.text}</option>`;
+            });
+
+            // Обновление Бенто-карточек на главном экране
+            document.getElementById('bentoDoneTasks').textContent = allTasks.filter(t => t.done).length;
+            document.getElementById('bentoLeftTasks').textContent = allTasks.filter(t => !t.done).length;
+            
+            const next = allTasks.find(t => !t.done);
+            document.getElementById('bentoNextTask').textContent = next ? next.text : 'Все цели закрыты!';
+            document.getElementById('bentoHabits').textContent = allHabits.length;
+            document.getElementById('bentoExpensesCount').textContent = `${allExpenses.length} транзакций`;
+
+            // Вывод списка задач (Сначала основные, под ними — их подзадачи)
+            const tList = document.getElementById('taskList'); tList.innerHTML = '';
+            allTasks.filter(t => !t.parentId).forEach(mt => {
+                appendTaskEl(mt, false, tList);
+                allTasks.filter(st => st.parentId === mt.id).forEach(st => appendTaskEl(st, true, tList));
+            });
+
+            // Вывод привычек — с отметкой "сегодня" и серией дней подряд
+            const hList = document.getElementById('habitList'); hList.innerHTML = '';
+            const today = todayStr();
+            allHabits.forEach(h => {
+                const completions = h.completions || {};
+                const doneToday = !!completions[today];
+                const streak = calcStreak(completions);
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <div class="task-header">
+                        <input type="checkbox" ${doneToday ? 'checked' : ''} onclick="toggleHabitToday('${h.id}', ${!doneToday})">
+                        <span style="flex-grow:1;">${h.title}</span>
+                        <button onclick="deleteHabit('${h.id}')" class="text-zinc-600 hover:text-red-500 transition" title="Удалить"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                    <div class="item-time" style="align-self:flex-start;">${streak > 0 ? `🔥 ${streak} ${streakLabel(streak)} подряд` : 'Отметьте сегодня, чтобы начать серию'}</div>
+                `;
+                hList.appendChild(li);
+            });
+
+            // Вывод логов дневника
+            const lList = document.getElementById('logList'); lList.innerHTML = '';
+            allLogs.forEach(l => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <div class="task-header">
+                        <span style="flex-grow:1;">${l.note}</span>
+                        <button onclick="deleteLog('${l.id}')" class="text-zinc-600 hover:text-red-500 transition" title="Удалить"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                    <span class="item-time">${l.createdAt || ''}</span>`;
+                lList.appendChild(li);
+            });
+
+            // Вывод расходов
+            const eList = document.getElementById('expenseList'); eList.innerHTML = '';
+            allExpenses.forEach(exp => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <div class="expense-row">
+                        <span>${exp.category}</span>
+                        <span style="display:flex; align-items:center; gap:8px;">
+                            <span class="expense-amount">-${Number(exp.amount).toLocaleString('ru-RU')} сум</span>
+                            <button onclick="deleteExpense('${exp.id}')" class="text-zinc-600 hover:text-red-500 transition" title="Удалить"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </span>
+                    </div>
+                    <span class="item-time">${exp.createdAt || ''}</span>`;
+                eList.appendChild(li);
+            });
+
+            lucide.createIcons();
+        }
+
+        // Сегодняшняя дата в формате YYYY-MM-DD (ключ для completions)
+        function todayStr() {
+            return new Date().toISOString().slice(0, 10);
+        }
+
+        // Считает серию дней подряд, в которые привычка отмечена выполненной
+        function calcStreak(completions) {
+            let streak = 0;
+            let cursor = new Date();
+            // Если сегодня ещё не отмечено — считаем серию с вчерашнего дня,
+            // чтобы не сбрасывать стрик раньше времени в течение дня
+            if (!completions[todayStr()]) {
+                cursor.setDate(cursor.getDate() - 1);
+            }
+            while (true) {
+                const key = cursor.toISOString().slice(0, 10);
+                if (completions[key]) {
+                    streak++;
+                    cursor.setDate(cursor.getDate() - 1);
+                } else {
+                    break;
+                }
+            }
+            return streak;
+        }
+
+        // Склонение слова "день" под число
+        function streakLabel(n) {
+            const mod10 = n % 10, mod100 = n % 100;
+            if (mod10 === 1 && mod100 !== 11) return 'день';
+            if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return 'дня';
+            return 'дней';
+        }
+
+        window.toggleHabitToday = function(id, done) {
+            fetch(`${API_URL}/api/habits/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'X-User-Id': currentUserId },
+                body: JSON.stringify({ date: todayStr(), done })
+            }).then(() => loadAllData());
+        }
+
+        window.deleteHabit = function(id) {
+            if (!confirm('Удалить привычку?')) return;
+            fetch(`${API_URL}/api/habits/${id}`, {
+                method: 'DELETE',
+                headers: { 'X-User-Id': currentUserId }
+            }).then(() => loadAllData());
+        }
+
+        window.deleteLog = function(id) {
+            if (!confirm('Удалить запись?')) return;
+            fetch(`${API_URL}/api/logs/${id}`, {
+                method: 'DELETE',
+                headers: { 'X-User-Id': currentUserId }
+            }).then(() => loadAllData());
+        }
+
+        window.deleteExpense = function(id) {
+            if (!confirm('Удалить расход?')) return;
+            fetch(`${API_URL}/api/expenses/${id}`, {
+                method: 'DELETE',
+                headers: { 'X-User-Id': currentUserId }
+            }).then(() => loadAllData());
+        }
+
+        function appendTaskEl(task, isSub, container) {
+            const li = document.createElement('li'); if (isSub) li.classList.add('subtask-item');
+            li.innerHTML = `
+                <div class="task-header">
+                    <input type="checkbox" ${task.done ? 'checked' : ''} onclick="toggleTask('${task.id}', ${!task.done})">
+                    <span style="flex-grow:1;${task.done ? 'text-decoration: line-through; color: var(--text-muted);' : ''}">${task.text}</span>
+                    <button onclick="deleteTask('${task.id}')" class="text-zinc-600 hover:text-red-500 transition" title="Удалить"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+                <div style="margin-top:5px;">
+                    <span class="badge">${task.priority || 'medium'}</span><span class="badge">${task.category}</span>
+                </div>
+                ${task.notes ? `<div class="task-notes">${task.notes}</div>` : ''}
+            `;
+            container.appendChild(li);
+        }
+
+        window.deleteTask = function(id) {
+            if (!confirm('Удалить задачу?')) return;
+            fetch(`${API_URL}/api/tasks/${id}`, {
+                method: 'DELETE',
+                headers: { 'X-User-Id': currentUserId }
+            }).then(() => loadAllData());
+        }
+
+        // Смена статуса чекбокса задачи
+        window.toggleTask = function(id, status) {
+            fetch(`${API_URL}/api/tasks/${id}`, {
+                method: 'PATCH',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-User-Id': currentUserId
+                },
+                body: JSON.stringify({ done: status })
+            }).then(() => loadAllData());
+        }
+
+        // Обработка отправки форм модулей
+        document.getElementById('todoForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = document.getElementById('taskInput').value.trim();
+            const category = document.getElementById('taskCategory').value;
+            const targetPeriod = document.getElementById('taskPeriod').value;
+            const priority = document.getElementById('taskPriority').value;
+            const notes = document.getElementById('taskNotes').value.trim();
+            const isSub = document.getElementById('isSubtask').checked;
+            const parentId = isSub ? document.getElementById('parentTaskId').value : null;
+
+            fetch(`${API_URL}/api/tasks`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-User-Id': currentUserId
+                },
+                body: JSON.stringify({ text, category, targetPeriod, priority, notes, parentId })
+            }).then(() => {
+                document.getElementById('todoForm').reset();
+                document.getElementById('parentTaskId').disabled = true;
+                loadAllData();
+            });
+        });
+
+        document.getElementById('habitForm').addEventListener('submit', (e) => {
+            e.preventDefault(); const input = document.getElementById('habitInput');
+            fetch(`${API_URL}/api/habits`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-Id': currentUserId }, body: JSON.stringify({ title: input.value.trim() }) }).then(() => { input.value = ''; loadAllData(); });
+        });
+
+        document.getElementById('logForm').addEventListener('submit', (e) => {
+            e.preventDefault(); const input = document.getElementById('logInput');
+            fetch(`${API_URL}/api/logs`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-Id': currentUserId }, body: JSON.stringify({ note: input.value.trim() }) }).then(() => { input.value = ''; loadAllData(); });
+        });
+
+        document.getElementById('expenseForm').addEventListener('submit', (e) => {
+            e.preventDefault(); const a = document.getElementById('expenseAmount'); const c = document.getElementById('expenseCategory');
+            fetch(`${API_URL}/api/expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-Id': currentUserId }, body: JSON.stringify({ amount: parseInt(a.value), category: c.value.trim() }) }).then(() => { a.value = ''; c.value = ''; loadAllData(); });
+        });
+
+        lucide.createIcons();
+    </script>
+</body>
+</html>
